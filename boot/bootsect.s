@@ -33,6 +33,7 @@ begbss:
 
 SETUPLEN = 4				! nr of setup-sectors
 BOOTSEG  = 0x07c0			! original address of boot-sector
+! 启动扇区被移动到内存的原始地址
 INITSEG  = 0x9000			! we move boot here - out of the way
 SETUPSEG = 0x9020			! setup starts here
 SYSSEG   = 0x1000			! system loaded at 0x10000 (65536).
@@ -45,21 +46,31 @@ ROOT_DEV = 0x306
 entry _start
 _start:
 	mov	ax,#BOOTSEG
-	mov	ds,ax
+	mov	ds,ax				! 为了访问 20 位地址线段基址要左移四位即 0x7c00
 	mov	ax,#INITSEG
-	mov	es,ax
-	mov	cx,#256
+	mov	es,ax				! 启动扇区被移动到的内存地址
+	mov	cx,#256				! 十进制数 256
 	sub	si,si
-	sub	di,di
+	sub	di,di				! 清空 si 和 di 寄存器
 	rep
-	movw
-	jmpi	go,INITSEG
+	movw					! 复制 cx (256) 个 word (16 bit, 2 byte) 从 ds:si 到 es:di 即将启动扇区复制到 0x90000
+	jmpi	go,INITSEG		! 跳转到 0x90000:go go是一个标签 代表了文件中的偏移地址 即跳转到被移动后的启动扇区 0x90000 的下一行汇编代码处
+	! 进行远跳转 同时改变 cs (0x9000) 和 ip (go) 寄存器 并通过 0x90000:go 表示正在执行的代码在内存中的位置
 go:	mov	ax,cs
 	mov	ds,ax
 	mov	es,ax
 ! put stack at 0x9ff00.
-	mov	ss,ax
+	mov	ss,ax			! 把 cs (0x9000) 寄存器的值赋给 ds es ss 寄存器
 	mov	sp,#0xFF00		! arbitrary value >>512
+
+! ss 栈段寄存器 配合 sp 栈基址寄存器指向栈顶地址 此时 ss:sp 指向 0x9ff00
+!	+------------------------------+  -> 0x9ff00 ss:sp
+!	|           stack              | 
+!	+------------------------------+ 
+!	|		   .......             |	
+!	+------------------------------+  -> 0x90200
+!	|          bootsect            |  ip
+!	+------------------------------+  -> 0x90000 cs ds es ss
 
 ! load the setup-sectors directly after the bootblock.
 ! Note that 'es' is already set up.
