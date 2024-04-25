@@ -72,20 +72,42 @@ go:	mov	ax,cs
 !	|          bootsect            |  ip
 !	+------------------------------+  -> 0x90000 cs ds es ss
 
+! 以上代码初步规划内存布局 数据段 代码段 栈顶指针
+
 ! load the setup-sectors directly after the bootblock.
 ! Note that 'es' is already set up.
 
 load_setup:
 	mov	dx,#0x0000		! drive 0, head 0
+	! dh 磁头号 (0) dl 驱动器号 (0)
+
 	mov	cx,#0x0002		! sector 2, track 0
+	! 磁道和扇区信息 ch 磁道号 (0) cl 扇区号 (2)
+
 	mov	bx,#0x0200		! address = 512, in INITSEG
+	! 数据将被加载到的地址 0x90200
+
 	mov	ax,#0x0200+SETUPLEN	! service 2, nr of sectors
+	! ah 服务号 (2) al 扇区数 (4)
+
 	int	0x13			! read it
+	! 发起 0x13 中断 从第 2 扇区开始读取 4 个扇区到 0x90200 (2,3,4,5 sector)
+
 	jnc	ok_load_setup		! ok - continue
 	mov	dx,#0x0000
 	mov	ax,#0x0000		! reset the diskette
 	int	0x13
 	j	load_setup
+
+	! 重置驱动器并校准磁头 重新加载 setup-sectors 
+
+!	+------------------------------+  -> 0x9ff00 ss:sp
+!	|           stack              | 
+!	+------------------------------+  -> 0x90a00
+!	|		    setup              |	
+!	+------------------------------+  -> 0x90200
+!	|          bootsect            |  ip
+!	+------------------------------+  -> 0x90000 cs ds es ss
 
 ok_load_setup:
 
@@ -118,6 +140,13 @@ ok_load_setup:
 	mov	ax,#SYSSEG
 	mov	es,ax		! segment of 0x010000
 	call	read_it
+
+	! 将 6 扇区以后的 240 个扇区移动到 0x10000
+
+!	+------------------------------+ 
+!	|           system             |  
+!	+------------------------------+  -> 0x10000
+
 	call	kill_motor
 
 ! After that we check which root-device to use. If the device is
