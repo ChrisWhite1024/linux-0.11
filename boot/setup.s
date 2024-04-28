@@ -36,15 +36,23 @@ start:
 	mov	ax,#INITSEG	! this is done in bootsect already, but...
 	mov	ds,ax
 	mov	ah,#0x03	! read cursor pos
+	! 读取光标位置
 	xor	bh,bh
 	int	0x10		! save it in known place, con_init fetches
+	! 触发 BIOS 提供的显示服务处理中断程序
+	! int 命令返回后 dx 寄存器中的值表示光标位置 dh 行号 dl 列号
 	mov	[0],dx		! it from 0x90000.
+	! 将光标位置保存在 0x90000 处
+
+! 调用 BIOS 中断获取系统信息
+! 获取内存信息
 ! Get memory size (extended mem, kB)
 
 	mov	ah,#0x88
 	int	0x15
 	mov	[2],ax
 
+! 获取显卡显示模式
 ! Get video-card data:
 
 	mov	ah,#0x0f
@@ -52,6 +60,7 @@ start:
 	mov	[4],bx		! bh = display page
 	mov	[6],ax		! al = video mode, ah = window width
 
+! 检查显示方式并取参数
 ! check for EGA/VGA and some config parameters
 
 	mov	ah,#0x12
@@ -106,11 +115,13 @@ is_disk1:
 ! now we want to move to protected mode ...
 
 	cli			! no interrupts allowed !
+	! 关闭中断
 
 ! first we move the system to it's rightful place
 
 	mov	ax,#0x0000
 	cld			! 'direction'=0, movs moves forward
+	! 清除方向标志位
 do_move:
 	mov	es,ax		! destination segment
 	add	ax,#0x1000
@@ -122,7 +133,24 @@ do_move:
 	mov 	cx,#0x8000
 	rep
 	movsw
+	! 复制 0x80000 字节 从 ds:si (0x10000:0x00) 到 es:di (0x0000:0x00) 
 	jmp	do_move
+
+!	+------------------------------+  -> 0x9ff00 ss:sp
+!	|           stack              | 
+!	+------------------------------+
+!	|		   .......             |
+!	+------------------------------+
+!	|		   	setup              |
+!	+------------------------------+  -> 0x90200
+!	|		   .......             |
+!	+------------------------------+
+!	|		 temp variable         |
+!	+------------------------------+  -> 0x90000
+!	|		   .......             |
+!	+------------------------------+  -> 0x80000
+!	|           system             |
+!	+------------------------------+  -> 0x00000
 
 ! then we load the segment descriptors
 
@@ -132,6 +160,7 @@ end_move:
 	lidt	idt_48		! load idt with 0,0
 	lgdt	gdt_48		! load gdt with whatever appropriate
 
+! 打开 A20 地址线
 ! that was painless, now we enable A20
 
 	call	empty_8042
@@ -189,6 +218,9 @@ end_move:
 	mov	ax,#0x0001	! protected mode (PE) bit
 	lmsw	ax		! This is it!
 	jmpi	0,8		! jmp offset 0 of segment 8 (cs)
+	! 0000 0000 0000 1000 去全局描述符表 (gdt) 中寻找段描述符索引为 1 的段选择子 (代码段描述符)
+	! 跳转到 0x0000 地址处开始执行
+
 
 ! This routine checks that the keyboard command queue is empty
 ! No timeout is used - if this hangs there is something wrong with
@@ -200,6 +232,7 @@ empty_8042:
 	jnz	empty_8042	! yes - loop
 	ret
 
+! 32 位保护模式下的全局描述符表
 gdt:
 	.word	0,0,0,0		! dummy
 
@@ -213,6 +246,8 @@ gdt:
 	.word	0x9200		! data read/write
 	.word	0x00C0		! granularity=4096, 386
 
+! 代码段和数据段段描述符的段基址均为 0x0000 则给出的偏移地址为时机的物理地址
+
 idt_48:
 	.word	0			! idt limit=0
 	.word	0,0			! idt base=0L
@@ -220,6 +255,7 @@ idt_48:
 gdt_48:
 	.word	0x800		! gdt limit=2048, 256 GDT entries
 	.word	512+gdt,0x9	! gdt base = 0X9xxxx
+	! 高 32 位存储全局描述符表 gdt 的内存地址
 	
 .text
 endtext:
