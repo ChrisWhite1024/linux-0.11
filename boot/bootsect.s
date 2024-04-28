@@ -140,12 +140,8 @@ ok_load_setup:
 	mov	ax,#SYSSEG
 	mov	es,ax		! segment of 0x010000
 	call	read_it
-
+	
 	! 将 6 扇区以后的 240 个扇区移动到 0x10000
-
-!	+------------------------------+ 
-!	|           system             |  
-!	+------------------------------+  -> 0x10000
 
 	call	kill_motor
 
@@ -264,6 +260,12 @@ bad_rt:	mov ax,#0
 	pop bx
 	pop ax
 	jmp read_track
+
+! 将 6 扇区以后的 240 个扇区移动到 0x10000
+
+!	+------------------------------+ 
+!	|           system             |  
+!	+------------------------------+  -> 0x10000
 
 !/*
 ! * This procedure turns off the floppy drive motor, so
