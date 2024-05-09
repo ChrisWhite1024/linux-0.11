@@ -13,6 +13,7 @@
  */
 .text
 .globl idt,gdt,pg_dir,tmp_floppy_area
+! 页目录 设置分页机制时存放 也会覆盖该处的代码
 pg_dir:
 .globl startup_32
 startup_32:
@@ -21,9 +22,14 @@ startup_32:
 	mov %ax,%es
 	mov %ax,%fs
 	mov %ax,%gs
+	# 指向 setup.s 中的数据段描述符
+	
 	lss stack_start,%esp
+	# 让 ss:esp 指向 stack_start 标签的地址
+	# 高位 8 字节为 0x10，会被赋值给 ss 寄存器，低位 16 字节为 user_stack 数组的最后一个元素的地址，会被赋值给 esp 寄存器
 	call setup_idt
 	call setup_gdt
+	# 原来设置的全局描述符和中断描述符在 setup.s 中，后面调整内存时会被覆盖掉，所以要重新设置将新地址加载到 IDTR 和 GDTR 寄存器中
 	movl $0x10,%eax		# reload all the segment registers
 	mov %ax,%ds		# after changing gdt. CS was already
 	mov %ax,%es		# reloaded in 'setup_gdt'
@@ -77,6 +83,8 @@ check_x87:
  *  sure everything is ok. This routine will be over-
  *  written by the page tables.
  */
+
+# 设置中断描述符表 让每一个中断描述符中的中断程序指向 ignore_int
 setup_idt:
 	lea ignore_int,%edx
 	movl $0x00080000,%eax
@@ -91,7 +99,7 @@ rp_sidt:
 	addl $8,%edi
 	dec %ecx
 	jne rp_sidt
-	lidt idt_descr
+	lidt idt_descr	/* 将中断描述符表信息置于 IDTR 寄存器中 */
 	ret
 
 /*
@@ -113,6 +121,7 @@ setup_gdt:
  * using 4 of them to span 16 Mb of physical memory. People with
  * more than 16MB will have to expand this.
  */
+# 4 个页表，一个页表 1024 个页表项，1页 4KB，共可以映射 16MB 的地址空间
 .org 0x1000
 pg0:
 
@@ -134,12 +143,14 @@ pg3:
 tmp_floppy_area:
 	.fill 1024,1,0
 
+# 开启分页机制，并且跳转到 main 函数
 after_page_tables:
 	pushl $0		# These are the parameters to main :-)
 	pushl $0
 	pushl $0
 	pushl $L6		# return address for main, if it decides to.
 	pushl $main
+	# 将 main 函数的返回地址压栈
 	jmp setup_paging
 L6:
 	jmp L6			# main should never return here, but
@@ -203,6 +214,7 @@ setup_paging:
 	xorl %edi,%edi			/* pg_dir is at 0x000 */
 	cld;rep;stosl
 	movl $pg0+7,pg_dir		/* set present bit/user r/w */
+	# 表示页表地址为 0x1000 ，页属性 0x07 表示该页存在，用户可读写
 	movl $pg1+7,pg_dir+4		/*  --------- " " --------- */
 	movl $pg2+7,pg_dir+8		/*  --------- " " --------- */
 	movl $pg3+7,pg_dir+12		/*  --------- " " --------- */
@@ -214,16 +226,18 @@ setup_paging:
 	jge 1b
 	xorl %eax,%eax		/* pg_dir is at 0x0000 */
 	movl %eax,%cr3		/* cr3 - page directory start */
+	# 告诉 CPU 页目录表的地址 (0地址处)
 	movl %cr0,%eax
 	orl $0x80000000,%eax
 	movl %eax,%cr0		/* set paging (PG) bit */
 	ret			/* this also flushes prefetch-queue */
+	# 返回指令，把栈顶元素 (main) 作为返回地址，跳转过去执行
 
 .align 2
 .word 0
 idt_descr:
-	.word 256*8-1		# idt contains 256 entries
-	.long idt
+	.word 256*8-1		# idt contains 256 entries 中断描述符表最后一个字节的偏移量 (256 * 8 - 1 Bytes)
+	.long idt			# 中断描述符表的起始内存地址 (32 bits)
 .align 2
 .word 0
 gdt_descr:
