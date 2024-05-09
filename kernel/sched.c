@@ -91,6 +91,7 @@ struct task_struct * task[NR_TASKS] = {&(init_task.task), }; // 定义任务指�
 // 时是先递减堆栈指针sp值，然后在sp指针处保存入栈内容。
 long user_stack [ PAGE_SIZE>>2 ] ;
 
+// 高位 8 字节为 0x10，会被赋值给 ss 寄存器，低位 16 字节为 user_stack 数组的最后一个元素的地址，会被赋值给 esp 寄存器
 struct {
 	long * a;
 	short b;
