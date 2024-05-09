@@ -27,6 +27,7 @@
 divide_error:
 	pushl $do_divide_error      # 首先把将要调用的函数地址入栈
 no_error_code:                  # 这里是五出错号处理的入口处。
+# xchgl指令用于交换两个 long 操作数的值
 	xchgl %eax,(%esp)           # _do_divide_error的地址→eax,eax被交换入栈
 	pushl %ebx
 	pushl %ecx
@@ -58,7 +59,7 @@ no_error_code:                  # 这里是五出错号处理的入口处。
 	popl %ecx
 	popl %ebx
 	popl %eax                   # 弹出原来eax中的内容
-	iret
+	iret						# 弹出栈顶的三个元素 分别赋值给 EIP CS EFLAGS
 
 # int1 -- debug 调试中断入口点。处理过程同上。类型：错误/陷阱(Fault/Trap);错误号：无。
 # 当EFLAGS中TF标志置位时而引发的中断。当发现硬件断点(数据：陷阱，代码：错误)；或者
