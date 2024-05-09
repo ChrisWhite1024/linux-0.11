@@ -1,6 +1,11 @@
 #ifndef _HEAD_H
 #define _HEAD_H
 
+/*
+	中断描述符表
+	全局描述符表
+	
+*/
 typedef struct desc_struct {
 	unsigned long a,b;
 } desc_table[256];
